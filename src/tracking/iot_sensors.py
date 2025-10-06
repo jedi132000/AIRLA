@@ -191,10 +191,11 @@ class IoTSensorSystem:
             
             self.temperature_sensors[sensor_id] = sensor_config
             
-            # Store in Redis
+            # Store in Redis (convert boolean/None values to strings)
+            redis_config = {k: str(v) if isinstance(v, (bool, type(None))) else v for k, v in sensor_config.items()}
             self.redis_client.hset(
                 f"sensor:temperature:{sensor_id}",
-                mapping=sensor_config
+                mapping=redis_config
             )
             
             logger.info(f"Registered temperature sensor {sensor_id} for vehicle {vehicle_id}")
@@ -222,10 +223,11 @@ class IoTSensorSystem:
             
             self.cargo_sensors[sensor_id] = sensor_config
             
-            # Store in Redis
+            # Store in Redis (convert boolean/None values to strings)
+            redis_config = {k: str(v) if isinstance(v, (bool, type(None))) else v for k, v in sensor_config.items()}
             self.redis_client.hset(
                 f"sensor:cargo:{sensor_id}",
-                mapping=sensor_config
+                mapping=redis_config
             )
             
             logger.info(f"Registered cargo sensor {sensor_id} for vehicle {vehicle_id}")
@@ -253,10 +255,11 @@ class IoTSensorSystem:
             
             self.environmental_sensors[sensor_id] = sensor_config
             
-            # Store in Redis
+            # Store in Redis (convert boolean/None values to strings)  
+            redis_config = {k: str(v) if isinstance(v, (bool, type(None))) else v for k, v in sensor_config.items()}
             self.redis_client.hset(
                 f"sensor:environmental:{sensor_id}",
-                mapping=sensor_config
+                mapping=redis_config
             )
             
             logger.info(f"Registered environmental sensor {sensor_id} for vehicle {vehicle_id}")
