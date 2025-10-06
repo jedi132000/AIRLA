@@ -200,8 +200,22 @@ class VehicleMonitor:
             return {'error': str(e)}
     
     def get_fleet_status(self) -> Dict[str, Any]:
-        """Alias for get_fleet_overview for dashboard compatibility"""
-        return self.get_fleet_overview()
+        """Get fleet status with individual vehicle data for dashboard compatibility"""
+        try:
+            fleet_data = {}
+            
+            # Get all vehicles from GPS tracker
+            all_locations = self.gps_tracker.get_all_vehicles_locations()
+            for vehicle_id in all_locations.keys():
+                vehicle_status = self.get_vehicle_status(vehicle_id)
+                if vehicle_status:
+                    fleet_data[vehicle_id] = vehicle_status
+            
+            return fleet_data
+            
+        except Exception as e:
+            logger.error(f"Failed to get fleet status: {str(e)}")
+            return {}
     
     def get_vehicle_history(self, vehicle_id: str, hours: int = 24) -> Dict[str, Any]:
         """Get vehicle history including location and diagnostics"""
