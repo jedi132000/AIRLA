@@ -44,6 +44,7 @@ A comprehensive multi-agent logistics management system built with Python, LangG
 - **Demo System**: ✅ **Simulated vehicle routes** for testing and demonstration
 - **Real-time Streaming**: MQTT/AMQP/Kafka for device-to-dashboard communication (Planned)
 - **Map Integration**: Google Maps, Mapbox, OpenStreetMap APIs (Planned)
+- **IoT Sensors**: ✅ **Temperature, cargo, and environmental monitoring** with real-time alerts
 - **Package Tracking**: QR/Barcode scanning, BLE/NFC tags, carrier APIs (Planned)
 
 ## 📦 Installation
@@ -271,7 +272,7 @@ Telematics ───┘         ↓
 - **Auto-refresh Dashboard**: Configurable refresh rates for live updates ✅
 - **Package Journey Visualization**: Complete tracking from pickup to delivery (Planned)
 - **Driver Mobile Integration**: Live status updates from mobile apps (Planned)
-- **IoT Sensor Data**: Temperature, humidity, shock detection for cargo (Planned)
+- **IoT Sensor Data**: Temperature, humidity, cargo monitoring, environmental sensors ✅ **IMPLEMENTED**
 - **Carrier Integration**: External shipment tracking (DHL, FedEx, UPS) (Planned)
 - **Predictive Alerts**: AI-powered delay and issue prediction (Planned)
 - **Emergency Response**: Instant alerts and automated escalation protocols (Planned)
@@ -315,11 +316,65 @@ telematics.start_demo_diagnostics()
 - ✅ **Live fleet mapping** with health-coded markers on interactive maps
 - ✅ **Auto-refresh dashboard** with configurable update intervals
 
-#### IoT Sensors Integration
-- **Temperature Monitoring**: Cold chain compliance for sensitive cargo
-- **Cargo Status**: Weight sensors, door sensors for security
-- **Vehicle Diagnostics**: Engine health, fuel efficiency, maintenance alerts
-- **Environmental Sensors**: Humidity, shock detection for fragile items
+#### IoT Sensors Integration ✅ **IMPLEMENTED**
+```python
+# IoT Sensor System - IMPLEMENTED
+from src.tracking.iot_sensors import IoTSensorSystem, TemperatureReading, CargoSensorReading, EnvironmentalReading
+
+# Initialize IoT sensor system
+iot_sensors = IoTSensorSystem()
+
+# Register temperature sensors for different cargo types
+iot_sensors.register_temperature_sensor("TEMP_VEH_001_FROZEN", "VEH_001", "cargo_bay", "frozen_goods")
+iot_sensors.register_temperature_sensor("TEMP_VEH_001_REFRIG", "VEH_001", "cargo_bay", "refrigerated")
+
+# Register cargo monitoring sensors
+iot_sensors.register_cargo_sensor("CARGO_VEH_001", "VEH_001", expected_weight=1500.0)
+
+# Register environmental sensors
+iot_sensors.register_environmental_sensor("ENV_VEH_001", "VEH_001", "cabin")
+
+# Start demo sensor simulation
+iot_sensors.start_demo_sensors(["VEH_001", "VEH_002", "VEH_003"])
+
+# Get comprehensive sensor status
+sensor_status = iot_sensors.get_vehicle_sensor_status("VEH_001")
+```
+
+#### IoT Sensor Features (Implemented)
+- ✅ **Temperature Monitoring**: Multi-zone temperature tracking with configurable thresholds
+  - Cold chain compliance for frozen goods (-20°C to -15°C)
+  - Refrigerated cargo monitoring (0°C to 4°C)
+  - Ambient temperature tracking (15°C to 25°C)
+  - Real-time humidity monitoring (80-95% range)
+
+- ✅ **Cargo Monitoring**: Comprehensive cargo security and status tracking
+  - Weight variance detection with configurable thresholds
+  - Door status monitoring (closed, open, breach detection)
+  - Security seal integrity monitoring
+  - Vibration level tracking for fragile cargo
+  - Automated security breach alerts
+
+- ✅ **Environmental Monitoring**: Driver and cargo environment tracking
+  - Air Quality Index (AQI) monitoring with health classifications
+  - CO2 level tracking with safety thresholds (800-1000+ ppm)
+  - Noise level monitoring for driver comfort (≤80 dB)
+  - Atmospheric pressure tracking
+  - Light level monitoring for cargo visibility
+
+- ✅ **Smart Alert System**: Multi-level alert management
+  - Critical alerts for security breaches and extreme temperatures
+  - High severity alerts for threshold violations
+  - Medium alerts for maintenance and operational issues
+  - Timestamp tracking and alert resolution management
+  - Real-time dashboard integration with color-coded status
+
+#### Dashboard IoT Integration
+- **Live Sensor Data Display**: Real-time temperature, cargo, and environmental readings
+- **Color-coded Status Indicators**: Green (normal), yellow (warning), red (critical)
+- **Interactive Sensor Controls**: Start/stop demo sensors, clear sensor data
+- **Alert Management**: Active alert display with severity levels and timestamps
+- **Per-vehicle Sensor Status**: Individual vehicle sensor monitoring and history
 
 ### Package Real-Time Tracking
 
@@ -587,7 +642,7 @@ This project is licensed under the MIT License. See LICENSE file for details.
 - [x] **Live Vehicle Tracking**: Comprehensive fleet monitoring with health diagnostics
 - [x] **Real-time Streaming**: Live data updates with Redis backend
 - [x] **Geofencing & Automation**: Zone monitoring with violation detection
-- [ ] **IoT Sensor Network**: Temperature, cargo, and environmental monitoring
+- [x] **IoT Sensor Network**: Temperature, cargo, and environmental monitoring ✅ **IMPLEMENTED**
 - [ ] **Package Tracking System**: QR/barcode scanning, BLE/NFC integration
 - [ ] **Mobile Driver App**: Real-time updates, scanning, digital signatures
 - [ ] **MQTT/Kafka Streaming**: Real-time data pipeline implementation
@@ -626,6 +681,7 @@ For questions, issues, or contributions:
 - 🎮 **Demo Vehicle System**: Full demo capabilities with simulated vehicle routes
 - ⚡ **Real-time Updates**: Auto-refresh dashboard with configurable intervals
 - 🚫 **Geofencing System**: Zone monitoring with violation detection and alerts
+- 🌡️ **IoT Sensor System**: Temperature, cargo, and environmental monitoring with smart alerts
 
 ### v2.0 - Enhanced Analytics & Monitoring
 - ✨ **Predictive Analytics Engine**: Advanced demand forecasting and route optimization

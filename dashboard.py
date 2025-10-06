@@ -28,10 +28,11 @@ from models import OrderState, VehicleState
 
 # Import tracking system
 try:
-    from tracking.vehicle_monitor import VehicleMonitor
-    from tracking.gps_tracker import GPSTracker, GPSLocation
-    from tracking.telematics import TelematicsUnit, VehicleDiagnostics
-    from tracking.setup import setup_gps_tracking, get_system_status
+    from src.tracking.vehicle_monitor import VehicleMonitor
+    from src.tracking.gps_tracker import GPSTracker, GPSLocation
+    from src.tracking.telematics import TelematicsUnit, VehicleDiagnostics
+    from src.tracking.iot_sensors import IoTSensorSystem, TemperatureReading, CargoSensorReading, EnvironmentalReading
+    from src.tracking.setup import setup_gps_tracking, get_system_status
     TRACKING_AVAILABLE = True
 except ImportError as e:
     st.warning(f"Live tracking system not available: {e}")
@@ -65,11 +66,19 @@ if 'logistics_system' not in st.session_state:
 # Initialize vehicle tracking system
 if TRACKING_AVAILABLE and 'vehicle_monitor' not in st.session_state:
     try:
-        st.session_state.vehicle_monitor = VehicleMonitor()
-        st.session_state.tracking_enabled = False
+        # Initialize tracking components
+        gps_tracker = GPSTracker()
+        telematics = TelematicsUnit()
+        iot_sensors = IoTSensorSystem()
+        
+        # Initialize vehicle monitor with all components
+        st.session_state.vehicle_monitor = VehicleMonitor(gps_tracker, telematics, iot_sensors)
+        st.session_state.iot_sensors = iot_sensors
+        st.session_state.tracking_enabled = True
         st.session_state.tracking_status = get_system_status()
     except Exception as e:
         st.session_state.vehicle_monitor = None
+        st.session_state.iot_sensors = None
         st.session_state.tracking_enabled = False
         st.session_state.tracking_status = {'error': str(e)}
 
@@ -1213,6 +1222,126 @@ with tab5:
                         
                         st_folium(m, width=700, height=400)
                     
+                    # IoT Sensor Data for Selected Vehicle
+                    if 'iot_sensors' in st.session_state and st.session_state.iot_sensors:
+                        st.markdown("### 🌡️ IoT Sensor Data")
+                        try:
+                            sensor_status = st.session_state.iot_sensors.get_vehicle_sensor_status(selected_vehicle)
+                            
+                            # Temperature Sensors
+                            if sensor_status.get('temperature_sensors'):
+                                st.markdown("#### 🌡️ Temperature Monitoring")
+                                for sensor_id, sensor_data in sensor_status['temperature_sensors'].items():
+                                    latest_reading = sensor_data.get('latest_reading')
+                                    if latest_reading:
+                                        temp = latest_reading.get('temperature_celsius', 'N/A')
+                                        humidity = latest_reading.get('humidity_percent', 'N/A')
+                                        location = latest_reading.get('location', 'cargo_bay')
+                                        
+                                        col1, col2, col3 = st.columns(3)
+                                        with col1:
+                                            st.metric(f"🌡️ Temperature ({location})", f"{temp}°C" if isinstance(temp, (int, float)) else str(temp))
+                                        with col2:
+                                            st.metric("💧 Humidity", f"{humidity}%" if isinstance(humidity, (int, float)) else str(humidity))
+                                        with col3:
+                                            # Temperature status
+                                            if isinstance(temp, (int, float)):
+                                                min_thresh = latest_reading.get('alert_threshold_min', 0)
+                                                max_thresh = latest_reading.get('alert_threshold_max', 25)
+                                                in_range = min_thresh <= temp <= max_thresh
+                                                status_icon = "✅" if in_range else "⚠️"
+                                                status_text = "Normal" if in_range else "Alert"
+                                                st.metric("🎯 Status", f"{status_icon} {status_text}")
+                                            else:
+                                                st.metric("🎯 Status", "⚪ Unknown")
+                            
+                            # Cargo Sensors
+                            if sensor_status.get('cargo_sensors'):
+                                st.markdown("#### 📦 Cargo Monitoring")
+                                for sensor_id, sensor_data in sensor_status['cargo_sensors'].items():
+                                    latest_reading = sensor_data.get('latest_reading')
+                                    if latest_reading:
+                                        weight = latest_reading.get('weight_kg', 'N/A')
+                                        door_status = latest_reading.get('door_status', 'unknown')
+                                        seal_intact = latest_reading.get('security_seal_intact', True)
+                                        vibration = latest_reading.get('vibration_level', 'N/A')
+                                        
+                                        col1, col2, col3, col4 = st.columns(4)
+                                        with col1:
+                                            weight_display = f"{weight:.1f} kg" if isinstance(weight, (int, float)) else str(weight)
+                                            st.metric("⚖️ Weight", weight_display)
+                                        with col2:
+                                            door_icon = "🟢" if door_status == "closed" else "🟡" if door_status == "open" else "🔴"
+                                            st.metric("🚪 Door", f"{door_icon} {door_status.title()}")
+                                        with col3:
+                                            seal_icon = "🟢" if seal_intact else "🔴"
+                                            seal_text = "Intact" if seal_intact else "Compromised"
+                                            st.metric("🔒 Seal", f"{seal_icon} {seal_text}")
+                                        with col4:
+                                            if isinstance(vibration, (int, float)):
+                                                vib_icon = "🟢" if vibration < 5 else "🟡" if vibration < 8 else "🔴"
+                                                st.metric("📳 Vibration", f"{vib_icon} {vibration:.1f}")
+                                            else:
+                                                st.metric("📳 Vibration", "⚪ Unknown")
+                            
+                            # Environmental Sensors
+                            if sensor_status.get('environmental_sensors'):
+                                st.markdown("#### 🌿 Environmental Monitoring")
+                                for sensor_id, sensor_data in sensor_status['environmental_sensors'].items():
+                                    latest_reading = sensor_data.get('latest_reading')
+                                    if latest_reading:
+                                        aqi = latest_reading.get('air_quality_index', 'N/A')
+                                        co2 = latest_reading.get('co2_ppm', 'N/A')
+                                        noise = latest_reading.get('noise_level_db', 'N/A')
+                                        pressure = latest_reading.get('pressure_hpa', 'N/A')
+                                        
+                                        col1, col2, col3, col4 = st.columns(4)
+                                        with col1:
+                                            if isinstance(aqi, int):
+                                                aqi_icon = "🟢" if aqi <= 50 else "🟡" if aqi <= 100 else "🔴"
+                                                aqi_status = "Good" if aqi <= 50 else "Moderate" if aqi <= 100 else "Poor"
+                                                st.metric("🌬️ Air Quality", f"{aqi_icon} {aqi} ({aqi_status})")
+                                            else:
+                                                st.metric("🌬️ Air Quality", "⚪ Unknown")
+                                        with col2:
+                                            if isinstance(co2, int):
+                                                co2_icon = "🟢" if co2 <= 800 else "🟡" if co2 <= 1000 else "🔴"
+                                                st.metric("💨 CO2", f"{co2_icon} {co2} ppm")
+                                            else:
+                                                st.metric("💨 CO2", "⚪ Unknown")
+                                        with col3:
+                                            if isinstance(noise, (int, float)):
+                                                noise_icon = "🟢" if noise <= 60 else "🟡" if noise <= 80 else "🔴"
+                                                st.metric("🔊 Noise", f"{noise_icon} {noise:.1f} dB")
+                                            else:
+                                                st.metric("🔊 Noise", "⚪ Unknown")
+                                        with col4:
+                                            if isinstance(pressure, (int, float)):
+                                                st.metric("🌡️ Pressure", f"{pressure:.1f} hPa")
+                                            else:
+                                                st.metric("🌡️ Pressure", "⚪ Unknown")
+                            
+                            # Sensor Alerts
+                            active_alerts = sensor_status.get('active_alerts', [])
+                            if active_alerts:
+                                st.markdown("#### ⚠️ Active Sensor Alerts")
+                                for alert in active_alerts:
+                                    severity = alert.get('severity', 'medium')
+                                    message = alert.get('message', 'Unknown alert')
+                                    alert_type = alert.get('alert_type', 'sensor')
+                                    timestamp = alert.get('timestamp', 'Unknown time')
+                                    
+                                    if severity == 'critical':
+                                        st.error(f"🔴 **CRITICAL - {alert_type.replace('_', ' ').title()}**: {message} ({timestamp})")
+                                    elif severity == 'high':
+                                        st.warning(f"🟡 **HIGH - {alert_type.replace('_', ' ').title()}**: {message} ({timestamp})")
+                                    else:
+                                        st.info(f"🔵 **{severity.upper()} - {alert_type.replace('_', ' ').title()}**: {message} ({timestamp})")
+                        
+                        except Exception as e:
+                            st.warning(f"Sensor data not available: {str(e)}")
+                            st.info("Start IoT sensor demo to see sensor data")
+                    
             else:
                 st.info("No vehicles currently being tracked. Start some demo vehicles to see live data.")
                 
@@ -1248,6 +1377,38 @@ with tab5:
                             st.rerun()
                         except Exception as e:
                             st.error(f"Failed to reset: {str(e)}")
+                
+                # IoT Sensor Demo Controls
+                if 'iot_sensors' in st.session_state and st.session_state.iot_sensors:
+                    st.subheader("🌡️ IoT Sensor Controls")
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        if st.button("🌡️ Start IoT Sensors"):
+                            try:
+                                st.session_state.iot_sensors.start_demo_sensors()
+                                st.success("IoT sensors started!")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Failed to start sensors: {str(e)}")
+                    
+                    with col2:
+                        if st.button("🛑 Stop IoT Sensors"):
+                            try:
+                                st.session_state.iot_sensors.stop_demo_sensors()
+                                st.success("IoT sensors stopped!")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Failed to stop sensors: {str(e)}")
+                    
+                    with col3:
+                        if st.button("🗑️ Clear Sensor Data"):
+                            try:
+                                st.session_state.iot_sensors.clear_sensor_data()
+                                st.success("Sensor data cleared!")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Failed to clear sensor data: {str(e)}")
+
         
         except Exception as e:
             st.error(f"Error accessing vehicle tracking system: {str(e)}")

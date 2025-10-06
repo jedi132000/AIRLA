@@ -1,6 +1,21 @@
 """
-Vehicle Monitor - Coordinates GPS tracking and telematics for comprehensive vehicle monitoring
+Vehicle monitoring and coordination system.
+Integrates GPS tracking and telematics for comprehensive fleet management.
 """
+
+import redis
+from typing import Dict, List, Any, Optional, Callable, Set
+from datetime import datetime, timedelta
+from .gps_tracker import GPSTracker, GPSLocation
+from .telematics import TelematicsUnit, VehicleDiagnostics, MaintenanceAlert
+from loguru import logger
+
+import redis
+from typing import Dict, List, Any, Optional, Callable, Set
+from datetime import datetime, timedelta
+from .gps_tracker import GPSTracker, GPSLocation
+from .telematics import TelematicsUnit, VehicleDiagnostics
+from loguru import logger
 
 from typing import Dict, List, Optional, Any, Callable
 from datetime import datetime, timedelta
@@ -15,16 +30,17 @@ from .telematics import TelematicsUnit, VehicleDiagnostics, MaintenanceAlert
 class VehicleMonitor:
     """Comprehensive vehicle monitoring system combining GPS and telematics"""
     
-    def __init__(self, gps_tracker: Optional[GPSTracker] = None, telematics: Optional[TelematicsUnit] = None):
-        self.gps_tracker = gps_tracker or GPSTracker()
-        self.telematics = telematics or TelematicsUnit()
-        self.monitored_vehicles = set()
-        self.is_running = False
-        self.alert_callbacks = []
+    def __init__(self, gps_tracker: GPSTracker, telematics: TelematicsUnit, iot_sensors=None):
+        """Initialize vehicle monitor"""
+        self.gps_tracker = gps_tracker
+        self.telematics = telematics
+        self.iot_sensors = iot_sensors  # Optional IoT sensor system
+        self.redis_client = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
         
-        # Setup callbacks between systems
-        self.gps_tracker.add_location_callback(self._on_location_update)
-        self.telematics.add_diagnostic_callback(self._on_diagnostic_update)
+        # Initialize tracking sets and callbacks
+        self.monitored_vehicles: Set[str] = set()
+        self.alert_callbacks: List[Callable] = []
+        self.is_running = False
         
         logger.info("Vehicle Monitor initialized")
     
