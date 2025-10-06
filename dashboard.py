@@ -1420,7 +1420,34 @@ with tab5:
             st.info("Please ensure Redis is running and the tracking system is properly initialized.")
 
 with tab6:
-    st.header("�🔍 System Monitoring & Diagnostics")
+    st.header("📱 Package Real-Time Tracking")
+    
+    if PACKAGE_TRACKING_AVAILABLE:
+        # Render package tracking tab using the imported function
+        try:
+            render_package_tracking_tab()
+        except Exception as e:
+            st.error(f"Error loading package tracking: {e}")
+            st.info("Package tracking system may need initialization.")
+    else:
+        st.error("Package Tracking System not available")
+        st.info("The package tracking modules could not be imported. Please check the installation.")
+        
+        # Show placeholder content
+        st.subheader("� Setup Required")
+        st.markdown("""
+        To enable package tracking, ensure the following components are installed:
+        
+        - **QR/Barcode Scanner**: For checkpoint scanning
+        - **BLE/NFC Integration**: For proximity-based tracking  
+        - **Package Tracker**: Core tracking system
+        - **Dashboard Integration**: Real-time updates
+        
+        Please run the system setup to initialize package tracking.
+        """)
+
+with tab7:
+    st.header("🔍 System Monitoring & Diagnostics")
     
     # System health overview
     col1, col2, col3, col4 = st.columns(4)
@@ -1526,7 +1553,7 @@ with tab6:
             }
             return color_map.get(val, '')
         
-        styled_df = log_df.style.applymap(style_log_level, subset=['level'])
+        styled_df = log_df.style.map(style_log_level, subset=['level'])
         st.dataframe(styled_df, use_container_width=True, height=300)
         
         # Log statistics
@@ -1572,7 +1599,7 @@ with tab6:
                 if st.button(f"❌ Dismiss", key=f"dis_{alert['type']}"):
                     st.info("Alert dismissed.")
 
-with tab6:
+with tab8:
     st.header("⚠️ Exception Handling & Alerts")
     
     # Exception overview metrics
@@ -1733,7 +1760,7 @@ with tab6:
     else:
         st.success("✅ System operating normally")
 
-with tab7:
+with tab9:
     st.header("📋 Audit Trail & Compliance")
     
     # Log user access to audit tab
