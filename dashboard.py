@@ -33,10 +33,14 @@ try:
     from src.tracking.telematics import TelematicsUnit, VehicleDiagnostics
     from src.tracking.iot_sensors import IoTSensorSystem, TemperatureReading, CargoSensorReading, EnvironmentalReading
     from src.tracking.setup import setup_gps_tracking, get_system_status
+    from src.tracking.dashboard_integration import render_package_tracking_tab
     TRACKING_AVAILABLE = True
+    PACKAGE_TRACKING_AVAILABLE = True
 except ImportError as e:
     st.warning(f"Live tracking system not available: {e}")
     TRACKING_AVAILABLE = False
+    PACKAGE_TRACKING_AVAILABLE = False
+    render_package_tracking_tab = None
 
 # Import audit logger from parent directory
 sys.path.insert(0, os.path.dirname(__file__))
@@ -288,12 +292,13 @@ with col4:
     st.caption("🔄 Last refresh: Just now")
 
 # Main content tabs
-tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9 = st.tabs([
     "📊 Overview", 
     "📦 Orders", 
     "🚐 Vehicles", 
     "🗺️ Map", 
     "📡 Live Tracking",
+    "📱 Package Tracking",
     "🔍 Monitoring", 
     "⚠️ Exceptions",
     "📋 Audit Log"

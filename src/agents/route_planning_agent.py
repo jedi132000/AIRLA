@@ -87,10 +87,21 @@ class RoutePlanningAgent(BaseAgent):
         vehicles_needing_routes = []
         
         for vehicle in system_state.vehicles.values():
-            if (vehicle.state == VehicleState.ASSIGNED and 
-                vehicle.assigned_orders and
+            # Check if vehicle has assigned orders but no route planned
+            if (vehicle.assigned_orders and
                 vehicle.id not in self.calculated_routes):
-                vehicles_needing_routes.append(vehicle)
+                
+                # Vehicle needs routing if it's assigned OR if it's moving but routes not calculated yet
+                if vehicle.state == VehicleState.ASSIGNED:
+                    vehicles_needing_routes.append(vehicle)
+                elif vehicle.state == VehicleState.MOVING:
+                    # Check if orders are still in 'assigned' state (not yet en_route)
+                    assigned_orders = [
+                        system_state.orders[order_id] for order_id in vehicle.assigned_orders
+                        if order_id in system_state.orders and system_state.orders[order_id].state.value == "assigned"
+                    ]
+                    if assigned_orders:
+                        vehicles_needing_routes.append(vehicle)
         
         logger.info(f"Found {len(vehicles_needing_routes)} vehicles needing route planning")
         return vehicles_needing_routes
@@ -424,6 +435,15 @@ class RoutePlanningAgent(BaseAgent):
                     "state": VehicleState.MOVING
                 })
                 
+                # Update all assigned orders to en_route state
+                system_state = self.state_manager.get_system_state()
+                if vehicle_id in system_state.vehicles:
+                    vehicle = system_state.vehicles[vehicle_id]
+                    for order_id in vehicle.assigned_orders:
+                        self.state_manager.update_order(order_id, {
+                            "state": "en_route"
+                        })
+                
                 # Store route in system
                 route_id = f"route_{vehicle_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
                 
@@ -434,10 +454,12 @@ class RoutePlanningAgent(BaseAgent):
                     
                     route = Route(
                         start_location=Location(
+                            address=f"Coordinates {first_stop['location'].latitude:.4f},{first_stop['location'].longitude:.4f}",
                             latitude=first_stop["location"].latitude,
                             longitude=first_stop["location"].longitude
                         ),
                         end_location=Location(
+                            address=f"Coordinates {last_stop['location'].latitude:.4f},{last_stop['location'].longitude:.4f}",
                             latitude=last_stop["location"].latitude,
                             longitude=last_stop["location"].longitude
                         ),
@@ -449,6 +471,19 @@ class RoutePlanningAgent(BaseAgent):
                 
                 # Notify supervisor and other agents
                 self._notify_route_completed(route_result)
+            else:
+                # Handle route planning failure
+                vehicle_id = route_result["vehicle_id"]
+                logger.error(f"Route planning failed for vehicle {vehicle_id}: {route_result.get('error', 'Unknown error')}")
+                
+                # For failed routes, mark orders as failed to prevent infinite loop
+                system_state = self.state_manager.get_system_state()
+                if vehicle_id in system_state.vehicles:
+                    vehicle = system_state.vehicles[vehicle_id]
+                    for order_id in vehicle.assigned_orders:
+                        self.state_manager.update_order(order_id, {
+                            "state": "failed"
+                        })
     
     def _notify_route_completed(self, route_result: Dict[str, Any]):
         """Notify other agents about completed route planning"""

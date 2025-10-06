@@ -8,7 +8,80 @@ A comprehensive multi-agent logistics management system built with Python, LangG
 - **Supervisor Agent**: Orchestrates system operations and resolves conflicts
 - **Order Ingestion Agent**: Processes incoming delivery requests and validates data
 - **Vehicle Assignment Agent**: Optimally assigns vehicles to orders based on constraints
-- **Route Planning Agent**: Calculates optimal routes using advanced algorithms
+- **Route Planning Agent**: Calculates op## 🐛 Bug Fixes & Troubleshooting
+
+### Recent Critical Fixes (v2.2)
+
+#### Order-Vehicle Alignment Issue ✅ **RESOLVED**
+**Problem**: Orders remained in "assigned" state while vehicles were in "moving" state, causing infinite routing loops.
+
+**Root Cause**: Route planning agent only detected vehicles in "ASSIGNED" state but vehicles were already set to "MOVING" by previous workflow runs.
+
+**Solution**: Enhanced `_get_vehicles_needing_routes()` to detect vehicles in both "ASSIGNED" and "MOVING" states that have unrouted orders.
+
+#### Location Validation Error ✅ **RESOLVED**  
+**Problem**: Route planning failed with "Location address field required" validation error.
+
+**Root Cause**: Location objects created with only latitude/longitude coordinates but missing required `address` field.
+
+**Solution**: Updated route planning to include coordinate-based addresses when creating Location objects.
+
+#### Workflow Infinite Loop ✅ **RESOLVED**
+**Problem**: System hit recursion limit due to endless routing attempts for orders that couldn't be processed.
+
+**Root Cause**: Orders stuck in "assigned" state while orchestrator continuously detected need for routing.
+
+**Solution**: 
+- Fixed vehicle state detection in route planning
+- Added proper order state transitions from "assigned" → "en_route"  
+- Enhanced error handling for failed route planning attempts
+
+#### Package Tracking Scan Event Error ✅ **RESOLVED**
+**Problem**: Package tracking failed with "Failed to process scan event: 'data'" KeyError during BLE and NFC scanning operations.
+
+**Root Cause**: `process_scan_event` method expected nested data structure `scan_data["data"]["package_id"]` but BLE/NFC scan results return package_id directly in root object.
+
+**Solution**: 
+- Enhanced `process_scan_event` method to handle both nested and flat data structures
+- Added fallback logic to check root-level package_id when nested structure not available
+- Improved error handling for different scan result formats
+
+### System Health Verification
+```python
+# Verify system is working correctly
+from src.logistics_system import LogisticsSystem
+from src.tracking.package_tracker import PackageTrackingSystem
+
+system = LogisticsSystem()
+system.start_system()
+
+# Run workflow cycle - should complete without infinite loops
+result = system.run_workflow_cycle()
+print("✅ System working correctly!" if not result.get('workflow_result', {}).get('failed') else "❌ Issue detected")
+
+# Check order-vehicle alignment
+orders = system.get_orders(limit=10)
+vehicles = system.get_vehicles()
+print(f"Orders: {len([o for o in orders if o['state'] in ['assigned', 'en_route']])}")
+print(f"Active vehicles: {len([v for v in vehicles if v['state'] in ['assigned', 'moving']])}")
+
+# Verify package tracking functionality
+tracker = PackageTrackingSystem()
+test_result = tracker.simulate_package_scan("TEST_PKG_001", "qr_code", {"name": "Test Location"})
+print(f"Package tracking: {'✅ Working' if test_result.get('success', False) else '❌ Issues detected'}")
+```
+
+### Troubleshooting Guide
+- **Infinite loops**: Check that orders properly transition through states
+- **Route planning errors**: Verify Location objects have required address field
+- **Vehicle detection**: Ensure route planning logic handles all vehicle states
+- **State alignment**: Monitor order and vehicle state consistency
+- **Package tracking errors**: Verify scan data format compatibility between different scanning methods
+- **BLE/NFC scan failures**: Check that process_scan_event handles both nested and flat data structures
+
+## 🔧 Configuration
+
+### Environment Variablesal routes using advanced algorithms
 - **Traffic & Weather Agent**: Monitors real-time conditions and provides updates
 - **Exception Handling Agent**: Manages failures, escalations, and recovery procedures
 
@@ -25,7 +98,7 @@ A comprehensive multi-agent logistics management system built with Python, LangG
 - **Comprehensive Audit Logging**: Complete system activity tracking with detailed logs
 - **Performance Monitoring**: Advanced metrics, KPI tracking, and efficiency analysis
 - **Live Vehicle Tracking**: GPS/Telematics integration with real-time location and health monitoring
-- **Package Real-Time Tracking**: Unique tracking IDs, BLE/NFC tags, and carrier API integration
+- **Package Real-Time Tracking**: ✅ **QR/Barcode scanning and BLE/NFC integration** with comprehensive package journey tracking
 - **Geofencing & Automation**: Automated status updates and workflow triggers based on location
 
 ### Technology Stack
@@ -45,7 +118,7 @@ A comprehensive multi-agent logistics management system built with Python, LangG
 - **Real-time Streaming**: MQTT/AMQP/Kafka for device-to-dashboard communication (Planned)
 - **Map Integration**: Google Maps, Mapbox, OpenStreetMap APIs (Planned)
 - **IoT Sensors**: ✅ **Temperature, cargo, and environmental monitoring** with real-time alerts
-- **Package Tracking**: QR/Barcode scanning, BLE/NFC tags, carrier APIs (Planned)
+- **Package Tracking**: ✅ **QR/Barcode scanning and BLE/NFC integration** with real-time package journey tracking
 
 ## 📦 Installation
 
@@ -643,7 +716,9 @@ This project is licensed under the MIT License. See LICENSE file for details.
 - [x] **Real-time Streaming**: Live data updates with Redis backend
 - [x] **Geofencing & Automation**: Zone monitoring with violation detection
 - [x] **IoT Sensor Network**: Temperature, cargo, and environmental monitoring ✅ **IMPLEMENTED**
-- [ ] **Package Tracking System**: QR/barcode scanning, BLE/NFC integration
+- [x] **System Stability**: Critical bug fixes for order-vehicle alignment and workflow loops ✅ **FIXED**
+- [x] **Route Planning Optimization**: Enhanced vehicle state detection and routing logic ✅ **IMPROVED**
+- [x] **Package Tracking System**: ✅ **QR/barcode scanning and BLE/NFC integration** with comprehensive tracking dashboard
 - [ ] **Mobile Driver App**: Real-time updates, scanning, digital signatures
 - [ ] **MQTT/Kafka Streaming**: Real-time data pipeline implementation
 - [ ] Machine learning route optimization with historical data
@@ -673,7 +748,18 @@ For questions, issues, or contributions:
 
 ## 🎉 Recent Updates
 
-### v2.1 - Live Vehicle Tracking & Diagnostics (Latest)
+### v2.3 - Package Tracking & System Stability (Latest)
+- 📦 **Package Tracking Fix**: Resolved KeyError in scan event processing for BLE/NFC operations
+- 🔧 **Critical Bug Fixes**: Resolved order-vehicle alignment issues causing infinite loops
+- 🚛 **Route Planning Improvements**: Fixed vehicle state detection for proper workflow execution
+- 📍 **Location Model Fixes**: Resolved Location validation errors in route planning
+- ⚡ **Workflow Optimization**: Enhanced orchestrator logic to prevent recursion loops
+- 🎯 **State Management**: Improved order state transitions from assigned → en_route
+- 🔄 **System Reliability**: Fixed edge cases in vehicle assignment and routing workflows
+- 🏷️ **Scan Compatibility**: Enhanced scan data processing to handle multiple data formats
+- ✅ **Complete Validation**: All tracking technologies (QR, Barcode, BLE, NFC) now fully operational
+
+### v2.1 - Live Vehicle Tracking & Diagnostics
 - 📡 **Live Tracking Dashboard**: New dedicated tab for real-time vehicle monitoring
 - 🚐 **GPS/Telematics Integration**: Complete vehicle tracking with location and diagnostics
 - 🔧 **Vehicle Health System**: Real-time health scoring and maintenance alerts
@@ -692,6 +778,13 @@ For questions, issues, or contributions:
 - 🚨 **Proactive Exception Handling**: ML-powered failure prediction and automated recovery
 
 ### Key Improvements
+- **Package Tracking Stability**: Fixed critical scan event processing errors for complete BLE/NFC functionality
+- **System Stability**: Fixed critical infinite loop issues in order-vehicle workflow
+- **Route Planning**: Resolved Location model validation errors for seamless routing
+- **State Management**: Improved order state transitions and workflow execution  
+- **Vehicle Detection**: Enhanced logic to handle vehicles in different operational states
+- **Error Handling**: Comprehensive fix for edge cases in assignment and routing
+- **Complete Scan Integration**: All tracking methods (QR, Barcode, BLE, NFC) now fully operational
 - **Live vehicle tracking** with real-time GPS and diagnostics data
 - **Interactive fleet monitoring** with health-coded vehicle markers
 - **Comprehensive vehicle diagnostics** including engine health and fuel levels

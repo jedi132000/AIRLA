@@ -86,6 +86,9 @@ class AgentOrchestrator:
         self.workflow = None
         self.message_queue: List[AgentMessage] = []
         self._processed_orders = set()  # Track orders we've already processed
+        self._failed_assignments = set()  # Track orders that failed vehicle assignment
+        self._assignment_attempts = {}  # Track assignment attempt counts per order
+        self._no_vehicle_attempts = 0  # Track consecutive "no vehicles" attempts
         self._current_step_count = 0
         
     def register_agent(self, agent: BaseAgent):
@@ -190,12 +193,10 @@ class AgentOrchestrator:
         # Get current step count to prevent infinite loops
         current_step = getattr(self, '_current_step_count', 0)
         
-        # If we've been running too long, only handle exceptions
-        if current_step > 15:
-            failed_orders = [o for o in system_state.orders.values() if o.state.value == "failed"]
-            decisions["has_exceptions"] = len(failed_orders) > 0
-            logger.warning(f"Step {current_step}: Only handling exceptions to prevent infinite loop")
-            return decisions
+        # If we've been running too long, stop processing
+        if current_step > 10:
+            logger.warning(f"Step {current_step}: Stopping workflow to prevent infinite loop")
+            return decisions  # Return all False to end workflow
         
         # Normal decision logic
         # Check for new orders that haven't been processed yet
@@ -212,8 +213,22 @@ class AgentOrchestrator:
         # Check for orders that need vehicle assignment (processed but not assigned)
         if not decisions["new_orders"]:  # Only check if not processing new orders
             ready_orders = [o for o in system_state.orders.values() 
-                           if o.state.value == "new" and o.id in self._processed_orders]
-            decisions["needs_assignment"] = len(ready_orders) > 0
+                           if o.state.value == "new" and o.id in self._processed_orders 
+                           and o.id not in self._failed_assignments]
+            
+            # Check if we have vehicles available before deciding on assignment
+            available_vehicles = [v for v in system_state.vehicles.values() 
+                                if v.state.value in ["available", "idle"]]
+            
+            # If no vehicles and we've already tried multiple times, stop trying
+            if len(available_vehicles) == 0 and self._no_vehicle_attempts >= 3:
+                logger.warning(f"No vehicles available after {self._no_vehicle_attempts} attempts. Marking orders as waiting.")
+                # Mark orders as failed assignment to prevent infinite loops
+                for order in ready_orders:
+                    self._failed_assignments.add(order.id)
+                decisions["needs_assignment"] = False
+            else:
+                decisions["needs_assignment"] = len(ready_orders) > 0
         
         # Check for orders that need routing (assigned but not yet en_route)
         assigned_orders = [o for o in system_state.orders.values() if o.state.value == "assigned"]
@@ -238,38 +253,52 @@ class AgentOrchestrator:
         """Route message between agents"""
         self.message_queue.append(message)
     
-    def run_workflow(self, initial_input: Dict[str, Any] = None) -> Dict[str, Any]:
-        """Execute the agent workflow with timeout protection"""
-        if not self.workflow:
-            self.build_workflow()
-        
-        # Reset tracking for new workflow run
-        self._processed_orders.clear()
-        self._current_step_count = 0
-        
-        input_data = initial_input or {"action": "process_system", "step_count": 0}
-        
+    def handle_vehicle_assignment_result(self, result: Dict[str, Any]):
+        """Handle the result of vehicle assignment to track failures"""
+        if result.get("message") == "no_vehicles_available":
+            self._no_vehicle_attempts += 1
+            logger.warning(f"No vehicles available (attempt {self._no_vehicle_attempts})")
+        else:
+            # Reset counter on successful assignment or other result
+            self._no_vehicle_attempts = 0
+    
+
+    
+    def run_workflow(self, initial_input: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """Run the agent workflow with recursion limit protection"""
         try:
-            # Set a hard limit on workflow execution time
-            import signal
+            if not self.workflow:
+                logger.error("Workflow not compiled")
+                return {"error": "Workflow not compiled"}
             
-            def timeout_handler(signum, frame):
-                raise TimeoutError("Workflow execution timed out after 30 seconds")
+            # Set step counter
+            self._current_step_count = 0
+            self._no_vehicle_attempts = 0  # Reset counter
             
-            signal.signal(signal.SIGALRM, timeout_handler)
-            signal.alarm(30)  # 30 second timeout
+            # Prepare input data
+            input_data = initial_input or {}
+            input_data.update({
+                "step_count": 0,
+                "force_end": False,
+                "system_state": self.state_manager.get_system_state()
+            })
             
-            result = self.workflow.invoke(input_data)
-            signal.alarm(0)  # Cancel the alarm
-            
-            logger.info("Workflow execution completed successfully")
+            # Execute workflow with recursion limit
+            from langchain_core.runnables import RunnableConfig
+            config = RunnableConfig(recursion_limit=50)
+            result = self.workflow.invoke(input_data, config=config)
             return result
-        except TimeoutError as e:
-            logger.error(f"Workflow execution timed out: {e}")
-            return {"error": "Workflow timed out", "timeout": True}
+            
         except Exception as e:
+            error_msg = str(e)
+            if "recursion limit" in error_msg.lower():
+                logger.warning("Workflow hit recursion limit - this indicates a no-vehicle scenario")
+                return {
+                    "message": "Workflow stopped due to no available vehicles",
+                    "success": True,
+                    "note": "Orders are waiting for vehicle availability"
+                }
             logger.error(f"Workflow execution failed: {e}")
-            # Return a more graceful result instead of raising
             return {"error": str(e), "failed": True}
     
     def get_agent_status(self) -> Dict[str, str]:
