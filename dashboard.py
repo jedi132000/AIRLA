@@ -26,6 +26,17 @@ sys.path.insert(0, src_path)
 from logistics_system import LogisticsSystem
 from models import OrderState, VehicleState
 
+# Import tracking system
+try:
+    from tracking.vehicle_monitor import VehicleMonitor
+    from tracking.gps_tracker import GPSTracker, GPSLocation
+    from tracking.telematics import TelematicsUnit, VehicleDiagnostics
+    from tracking.setup import setup_gps_tracking, get_system_status
+    TRACKING_AVAILABLE = True
+except ImportError as e:
+    st.warning(f"Live tracking system not available: {e}")
+    TRACKING_AVAILABLE = False
+
 # Import audit logger from parent directory
 sys.path.insert(0, os.path.dirname(__file__))
 from audit_logger import audit_logger, AuditEventType, AuditSeverity
@@ -50,6 +61,17 @@ st.set_page_config(
 if 'logistics_system' not in st.session_state:
     st.session_state.logistics_system = LogisticsSystem()
     st.session_state.system_started = False
+
+# Initialize vehicle tracking system
+if TRACKING_AVAILABLE and 'vehicle_monitor' not in st.session_state:
+    try:
+        st.session_state.vehicle_monitor = VehicleMonitor()
+        st.session_state.tracking_enabled = False
+        st.session_state.tracking_status = get_system_status()
+    except Exception as e:
+        st.session_state.vehicle_monitor = None
+        st.session_state.tracking_enabled = False
+        st.session_state.tracking_status = {'error': str(e)}
 
 # Sidebar controls with enhanced UI
 with st.sidebar:
@@ -257,11 +279,12 @@ with col4:
     st.caption("🔄 Last refresh: Just now")
 
 # Main content tabs
-tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
     "📊 Overview", 
     "📦 Orders", 
-    "� Vehicles", 
+    "🚐 Vehicles", 
     "🗺️ Map", 
+    "📡 Live Tracking",
     "🔍 Monitoring", 
     "⚠️ Exceptions",
     "📋 Audit Log"
@@ -1058,7 +1081,180 @@ with tab4:
         st.metric("🚦 Traffic Delay", f"+{traffic_delay} min")
 
 with tab5:
-    st.header("🔍 System Monitoring & Diagnostics")
+    st.header("� Live Vehicle Tracking & Diagnostics")
+    
+    if 'vehicle_monitor' not in st.session_state or st.session_state.vehicle_monitor is None:
+        st.warning("⚠️ Vehicle tracking system not initialized. Please ensure Redis is running and restart the dashboard.")
+        if st.button("🔄 Retry Initialization"):
+            st.rerun()
+    else:
+        monitor = st.session_state.vehicle_monitor
+        
+        # Auto-refresh toggle
+        col1, col2, col3 = st.columns([1, 1, 2])
+        with col1:
+            auto_refresh = st.toggle("🔄 Auto Refresh", value=True)
+        with col2:
+            refresh_interval = st.selectbox("Refresh Rate", [5, 10, 30, 60], index=1, format_func=lambda x: f"{x}s")
+        with col3:
+            if st.button("🔄 Refresh Now"):
+                st.rerun()
+        
+        # Auto-refresh functionality
+        if auto_refresh:
+            time.sleep(refresh_interval)
+            st.rerun()
+        
+        try:
+            # Fleet Overview
+            st.subheader("🚐 Fleet Overview")
+            fleet_status = monitor.get_fleet_status()
+            
+            if fleet_status:
+                col1, col2, col3, col4 = st.columns(4)
+                with col1:
+                    total_vehicles = len(fleet_status)
+                    st.metric("Total Vehicles", total_vehicles)
+                with col2:
+                    active_vehicles = sum(1 for v in fleet_status.values() if v.get('gps', {}).get('speed', 0) > 0)
+                    st.metric("Active Vehicles", active_vehicles)
+                with col3:
+                    healthy_vehicles = sum(1 for v in fleet_status.values() if v.get('diagnostics', {}).get('health_score', 0) > 80)
+                    st.metric("Healthy Vehicles", healthy_vehicles)
+                with col4:
+                    vehicles_with_alerts = sum(1 for v in fleet_status.values() if v.get('diagnostics', {}).get('maintenance_alerts'))
+                    st.metric("⚠️ Alerts", vehicles_with_alerts, delta_color="inverse")
+                
+                # Vehicle Selection
+                st.subheader("🔍 Vehicle Details")
+                vehicle_ids = list(fleet_status.keys())
+                selected_vehicle = st.selectbox("Select Vehicle", vehicle_ids if vehicle_ids else ["No vehicles available"])
+                
+                if selected_vehicle and selected_vehicle in fleet_status:
+                    vehicle_data = fleet_status[selected_vehicle]
+                    
+                    # Vehicle status cards
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        st.markdown("### 📍 GPS Status")
+                        gps_data = vehicle_data.get('gps', {})
+                        if gps_data:
+                            st.write(f"**Latitude:** {gps_data.get('latitude', 'N/A')}")
+                            st.write(f"**Longitude:** {gps_data.get('longitude', 'N/A')}")
+                            st.write(f"**Speed:** {gps_data.get('speed', 0)} km/h")
+                            st.write(f"**Heading:** {gps_data.get('heading', 0)}°")
+                            st.write(f"**Last Update:** {gps_data.get('timestamp', 'N/A')}")
+                        else:
+                            st.warning("No GPS data available")
+                    
+                    with col2:
+                        st.markdown("### 🔧 Vehicle Health")
+                        diagnostics = vehicle_data.get('diagnostics', {})
+                        if diagnostics:
+                            health_score = diagnostics.get('health_score', 0)
+                            if health_score >= 80:
+                                st.success(f"**Health Score:** {health_score}/100")
+                            elif health_score >= 60:
+                                st.warning(f"**Health Score:** {health_score}/100")
+                            else:
+                                st.error(f"**Health Score:** {health_score}/100")
+                            
+                            st.write(f"**Engine RPM:** {diagnostics.get('engine_rpm', 'N/A')}")
+                            st.write(f"**Fuel Level:** {diagnostics.get('fuel_level', 'N/A')}%")
+                            st.write(f"**Engine Temp:** {diagnostics.get('engine_temperature', 'N/A')}°C")
+                            st.write(f"**Mileage:** {diagnostics.get('odometer_reading', 'N/A')} km")
+                        else:
+                            st.warning("No diagnostics data available")
+                    
+                    # Maintenance Alerts
+                    alerts = vehicle_data.get('diagnostics', {}).get('maintenance_alerts', [])
+                    if alerts:
+                        st.markdown("### ⚠️ Maintenance Alerts")
+                        for alert in alerts:
+                            alert_type = alert.get('type', 'Unknown')
+                            severity = alert.get('severity', 'medium')
+                            message = alert.get('message', 'No message')
+                            
+                            if severity == 'critical':
+                                st.error(f"🔴 **{alert_type}**: {message}")
+                            elif severity == 'high':
+                                st.warning(f"🟡 **{alert_type}**: {message}")
+                            else:
+                                st.info(f"🔵 **{alert_type}**: {message}")
+                    
+                    # Geofence Status
+                    geofence_violations = vehicle_data.get('geofence_violations', [])
+                    if geofence_violations:
+                        st.markdown("### 🚫 Geofence Violations")
+                        for violation in geofence_violations:
+                            st.error(f"**{violation.get('type', 'Violation')}**: {violation.get('message', 'Unknown violation')}")
+                    
+                    # Live Map
+                    st.markdown("### 🗺️ Live Vehicle Map")
+                    if gps_data and gps_data.get('latitude') and gps_data.get('longitude'):
+                        import folium
+                        from streamlit_folium import st_folium
+                        
+                        # Create map centered on vehicle
+                        m = folium.Map(
+                            location=[gps_data['latitude'], gps_data['longitude']],
+                            zoom_start=15
+                        )
+                        
+                        # Add vehicle marker
+                        health_score = vehicle_data.get('diagnostics', {}).get('health_score', 0)
+                        color = 'green' if health_score >= 80 else 'orange' if health_score >= 60 else 'red'
+                        folium.Marker(
+                            [gps_data['latitude'], gps_data['longitude']],
+                            popup=f"Vehicle {selected_vehicle}<br>Health: {health_score}/100<br>Speed: {gps_data.get('speed', 0)} km/h",
+                            icon=folium.Icon(color=color, icon='truck', prefix='fa')
+                        ).add_to(m)
+                        
+                        st_folium(m, width=700, height=400)
+                    
+            else:
+                st.info("No vehicles currently being tracked. Start some demo vehicles to see live data.")
+                
+                # Demo vehicle controls
+                st.subheader("🎮 Demo Controls")
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    if st.button("🚀 Start Demo Vehicles"):
+                        try:
+                            monitor.gps_tracker.start_demo_routes()
+                            monitor.telematics.start_demo_diagnostics()
+                            st.success("Demo vehicles started!")
+                            time.sleep(1)
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Failed to start demo: {str(e)}")
+                
+                with col2:
+                    if st.button("⏹️ Stop Demo Vehicles"):
+                        try:
+                            monitor.gps_tracker.stop_demo_routes()
+                            monitor.telematics.stop_demo_diagnostics()
+                            st.success("Demo vehicles stopped!")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Failed to stop demo: {str(e)}")
+                
+                with col3:
+                    if st.button("🔄 Reset Demo Data"):
+                        try:
+                            monitor.gps_tracker.clear_vehicle_data()
+                            st.success("Demo data cleared!")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Failed to reset: {str(e)}")
+        
+        except Exception as e:
+            st.error(f"Error accessing vehicle tracking system: {str(e)}")
+            st.info("Please ensure Redis is running and the tracking system is properly initialized.")
+
+with tab6:
+    st.header("�🔍 System Monitoring & Diagnostics")
     
     # System health overview
     col1, col2, col3, col4 = st.columns(4)
