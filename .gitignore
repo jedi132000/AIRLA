@@ -67,3 +67,9 @@ Thumbs.db
 # Cache
 .cache/
 *.cache
+
+# Test and demo files (not essential for main app)
+*test*.py
+*demo*.py
+apply_*.py
+fix_*.py
