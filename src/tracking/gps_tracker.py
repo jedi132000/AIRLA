@@ -49,6 +49,7 @@ class GPSTracker:
         self.is_tracking = False
         self.tracked_vehicles = {}
         self.location_callbacks = []
+        self.tracking_thread = None
         
         # Simulated GPS data for demo purposes
         self.demo_routes = {
@@ -330,4 +331,53 @@ class GPSTracker:
             
         except Exception as e:
             logger.error(f"Failed to check geofence for {vehicle_id}: {str(e)}")
+            return False
+    
+    def start_demo_routes(self) -> bool:
+        """Start demo vehicle routes for testing"""
+        try:
+            # Add demo vehicles if not already added
+            demo_vehicles = ["VEH_001", "VEH_002", "VEH_003"]
+            for vehicle_id in demo_vehicles:
+                if vehicle_id not in self.tracked_vehicles:
+                    self.add_vehicle(vehicle_id)
+            
+            # Start tracking if not already running
+            if not self.is_tracking:
+                return self.start_tracking()
+            
+            logger.info("Demo routes started")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to start demo routes: {str(e)}")
+            return False
+    
+    def stop_demo_routes(self) -> bool:
+        """Stop demo vehicle routes"""
+        try:
+            return self.stop_tracking()
+            
+        except Exception as e:
+            logger.error(f"Failed to stop demo routes: {str(e)}")
+            return False
+    
+    def clear_vehicle_data(self) -> bool:
+        """Clear all vehicle tracking data"""
+        try:
+            # Stop tracking first
+            self.stop_tracking()
+            
+            # Clear tracked vehicles
+            self.tracked_vehicles.clear()
+            
+            # Clear Redis data
+            for key in self.redis_client.scan_iter(match="gps:*"):
+                self.redis_client.delete(key)
+            
+            logger.info("Vehicle tracking data cleared")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to clear vehicle data: {str(e)}")
             return False

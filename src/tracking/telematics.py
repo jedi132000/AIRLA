@@ -461,3 +461,32 @@ class TelematicsUnit:
         except Exception as e:
             logger.error(f"Failed to get fleet health summary: {str(e)}")
             return {'total_vehicles': 0, 'avg_health_score': 0, 'critical_alerts': 0}
+    
+    def start_demo_diagnostics(self) -> bool:
+        """Start demo diagnostic data simulation"""
+        try:
+            # Add demo vehicles if not already added
+            demo_vehicles = ["VEH_001", "VEH_002", "VEH_003"]
+            for vehicle_id in demo_vehicles:
+                if vehicle_id not in self.monitored_vehicles:
+                    self.add_vehicle(vehicle_id)
+            
+            # Start monitoring if not already running
+            if not self.is_monitoring:
+                return self.start_monitoring()
+            
+            logger.info("Demo diagnostics started")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to start demo diagnostics: {str(e)}")
+            return False
+    
+    def stop_demo_diagnostics(self) -> bool:
+        """Stop demo diagnostic simulation"""
+        try:
+            return self.stop_monitoring()
+            
+        except Exception as e:
+            logger.error(f"Failed to stop demo diagnostics: {str(e)}")
+            return False

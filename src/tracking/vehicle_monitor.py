@@ -145,44 +145,63 @@ class VehicleMonitor:
     def get_fleet_overview(self) -> Dict[str, Any]:
         """Get comprehensive fleet overview"""
         try:
-            fleet_data = {
+            overview = {
+                'timestamp': datetime.now(),
                 'total_vehicles': len(self.monitored_vehicles),
                 'active_vehicles': 0,
                 'vehicles': {},
-                'fleet_health': self.telematics.get_fleet_health_summary(),
-                'alerts_summary': {'critical': 0, 'warning': 0, 'info': 0},
-                'locations': {}
+                'alerts': []
             }
             
             for vehicle_id in self.monitored_vehicles:
                 vehicle_status = self.get_vehicle_status(vehicle_id)
-                fleet_data['vehicles'][vehicle_id] = vehicle_status
+                overview['vehicles'][vehicle_id] = vehicle_status
                 
-                # Count active vehicles (moving)
-                if vehicle_status.get('is_moving', False):
-                    fleet_data['active_vehicles'] += 1
+                # Count active vehicles (vehicles with recent GPS data)
+                location_data = vehicle_status.get('location')
+                if location_data and location_data.get('timestamp'):
+                    try:
+                        # Handle both string timestamp and datetime object
+                        timestamp_value = location_data['timestamp']
+                        if isinstance(timestamp_value, str):
+                            # Clean up timezone info and parse
+                            clean_timestamp = timestamp_value.replace('Z', '').replace('+00:00', '')
+                            if '.' in clean_timestamp:
+                                # Handle microseconds
+                                last_update = datetime.fromisoformat(clean_timestamp)
+                            else:
+                                last_update = datetime.fromisoformat(clean_timestamp)
+                        elif isinstance(timestamp_value, datetime):
+                            last_update = timestamp_value
+                        else:
+                            logger.warning(f"Unexpected timestamp type for vehicle {vehicle_id}: {type(timestamp_value)}")
+                            continue
+                        
+                        # Check if vehicle was active in last 5 minutes
+                        time_diff = (datetime.now() - last_update).total_seconds()
+                        if time_diff < 300:  # 5 minutes
+                            overview['active_vehicles'] += 1
+                    except (ValueError, TypeError, AttributeError) as e:
+                        logger.warning(f"Invalid timestamp format for vehicle {vehicle_id}: {e}")
+                        continue
                 
-                # Aggregate alerts
-                for alert in vehicle_status.get('maintenance_alerts', []):
-                    alert_type = alert.get('alert_type', 'info')
-                    if alert_type in fleet_data['alerts_summary']:
-                        fleet_data['alerts_summary'][alert_type] += 1
-                
-                # Store locations for mapping
-                if vehicle_status.get('location'):
-                    location = vehicle_status['location']
-                    fleet_data['locations'][vehicle_id] = {
-                        'lat': location['latitude'],
-                        'lng': location['longitude'],
-                        'speed': location['speed'],
-                        'heading': location['heading']
-                    }
+                # Collect alerts
+                diagnostics = vehicle_status.get('diagnostics', {})
+                alerts = diagnostics.get('maintenance_alerts', [])
+                if alerts:
+                    for alert in alerts:
+                        alert['vehicle_id'] = vehicle_id
+                        overview['alerts'].append(alert)
             
-            return fleet_data
+            return overview
             
         except Exception as e:
             logger.error(f"Failed to get fleet overview: {str(e)}")
             return {'error': str(e)}
+    
+    def get_fleet_status(self) -> Dict[str, Any]:
+        """Alias for get_fleet_overview for dashboard compatibility"""
+        return self.get_fleet_overview()
     
     def get_vehicle_history(self, vehicle_id: str, hours: int = 24) -> Dict[str, Any]:
         """Get vehicle history including location and diagnostics"""
