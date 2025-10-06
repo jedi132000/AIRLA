@@ -229,9 +229,9 @@ with col2:
     # System status with enhanced indicators
     if st.session_state.system_started:
         system_status = st.session_state.logistics_system.get_system_status()
-        if system_status.get('system_active', False):
+        if system_status.get('system_running', False):
             st.success("🟢 System Online")
-            st.caption(f"⚡ {system_status.get('active_agents', 0)}/6 Agents Active")
+            st.caption(f"⚡ {system_status.get('total_agents', 0)}/6 Agents Active")
         else:
             st.warning("🟡 System Starting...")
     else:
